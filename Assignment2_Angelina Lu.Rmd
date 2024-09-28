@@ -1,0 +1,79 @@
+---
+title: "Assignment 2"
+author: "Angelina Lu & Yuchen Ding"
+date: "2024-09-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+options(repos = c(CRAN = "http://cran.r-project.org"))
+knitr::opts_chunk$set(echo = TRUE,cache=TRUE, 
+                      autodep=TRUE, cache.comments=FALSE,
+                      message=FALSE, warning=FALSE,
+                      fig.width=4.5, fig.height=3)
+library(tidyverse)
+library(gtrendsR)
+library(censusapi)
+```
+
+```{r}
+library(gtrendsR)
+res <- gtrends(c("crime", "loans"), 
+               geo = "US-IL", 
+               time = "2020-01-01 2020-12-31", 
+               low_search_volume = TRUE)
+plot(res)
+```
+
+```{r}
+str(res)
+head(res$interest_over_time)
+
+library(tidyverse)
+trend_data <- res$interest_over_time
+glimpse(trend_data)
+```
+### 1A. Find the mean, median and variance of the search hits for the keywords.
+
+```{r}
+crime_data <- trend_data %>% filter(keyword == "crime")
+mean_crime <- mean(crime_data$hits)
+median_crime <- median(crime_data$hits)
+var_crime <- var(crime_data$hits)
+
+loans_data <- trend_data %>% filter(keyword == "loans")
+mean_loans <- mean(loans_data$hits)
+median_loans <- median(loans_data$hits)
+var_loans <- var(loans_data$hits)
+
+mean_crime
+median_crime
+var_crime
+
+mean_loans
+median_loans
+var_loans
+```
+### 1B. Which cities (locations) have the highest search frequency for loans? Note that there might be multiple rows for each city if there were hits for both “crime” and “loans” in that city. It might be easier to answer this question if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city.
+
+```{r}
+loans_by_city <- trend_data %>%
+  filter(keyword == "loans") %>%
+  group_by(geo) %>%
+  summarize(total_hits = sum(hits)) %>%
+  arrange(desc(total_hits))
+
+head(loans_by_city)
+```
+
+### 1C. Is there a relationship between the search intensities between the two keywords we used? Is there a relationship between the search intensities between the two keywords we used?
+
+```{r}
+merged_data <- trend_data %>%
+  select(date, keyword, hits) %>%
+  pivot_wider(names_from = keyword, values_from = hits)
+
+correlation <- cor(merged_data$crime, merged_data$loans, use = "complete.obs")
+correlation
+```
+
