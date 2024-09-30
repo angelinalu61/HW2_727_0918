@@ -1,0 +1,237 @@
+---
+title: "Assignment 2"
+author: "Angelina Lu & Yuchen Ding"
+date: "2024-09-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+options(repos = c(CRAN = "http://cran.r-project.org"))
+knitr::opts_chunk$set(echo = TRUE,cache=TRUE, 
+                      autodep=TRUE, cache.comments=FALSE,
+                      message=FALSE, warning=FALSE,
+                      fig.width=4.5, fig.height=3)
+library(tidyverse)
+library(gtrendsR)
+library(censusapi)
+```
+
+```{r}
+library(gtrendsR)
+res <- gtrends(c("crime", "loans"), 
+               geo = "US-IL", 
+               time = "2020-01-01 2020-12-31", 
+               low_search_volume = TRUE)
+plot(res)
+```
+
+```{r}
+str(res)
+head(res$interest_over_time)
+
+library(tidyverse)
+trend_data <- res$interest_over_time
+glimpse(trend_data)
+```
+### 1A. Find the mean, median and variance of the search hits for the keywords.
+
+```{r}
+crime_data <- trend_data %>% filter(keyword == "crime")
+mean_crime <- mean(crime_data$hits)
+median_crime <- median(crime_data$hits)
+var_crime <- var(crime_data$hits)
+
+loans_data <- trend_data %>% filter(keyword == "loans")
+mean_loans <- mean(loans_data$hits)
+median_loans <- median(loans_data$hits)
+var_loans <- var(loans_data$hits)
+
+mean_crime
+median_crime
+var_crime
+
+mean_loans
+median_loans
+var_loans
+```
+### 1B. Which cities (locations) have the highest search frequency for loans? Note that there might be multiple rows for each city if there were hits for both “crime” and “loans” in that city. It might be easier to answer this question if we had the search hits info for both search terms in two separate variables. That is, each row would represent a unique city.
+
+```{r}
+trend_data_city <- res$interest_by_city
+
+trend_data_city <- trend_data_city %>%
+  mutate(hits = as.numeric(hits))
+
+loans_by_city <- trend_data_city %>%
+  filter(keyword == "loans") %>%  
+  group_by(location) %>% 
+  summarize(total_hits = sum(hits, na.rm = TRUE)) %>%  
+  arrange(desc(total_hits))
+
+head(loans_by_city)
+```
+
+### 1C. Is there a relationship between the search intensities between the two keywords we used? Is there a relationship between the search intensities between the two keywords we used?
+
+```{r}
+merged_data <- trend_data %>%
+  select(date, keyword, hits) %>%
+  pivot_wider(names_from = keyword, values_from = hits)
+
+correlation <- cor(merged_data$crime, merged_data$loans, use = "complete.obs")
+correlation
+```
+
+The correlation coefficient r = -0.1654059 indicates a slight negative correlation between the search popularity of "crime" and "loans." However, when the correlation coefficient is close to 0, it suggests almost no linear relationship. Therefore, there is no significant linear correlation between the search popularity of these two keywords, and their changes are likely influenced by different factors.
+
+### Repeat the above for keywords related to covid. Make sure you use multiple keywords like we did above. Try several different combinations and think carefully about words that might make sense within this context.
+
+```{r}
+library(gtrendsR)
+library(tidyverse)
+
+covid_res <- gtrends(c("death", "lockdown", "hospital"), 
+                     geo = "US-IL", 
+                     time = "2020-01-01 2020-12-31", 
+                     low_search_volume = TRUE)
+
+covid_data <- covid_res$interest_over_time
+head(covid_data)
+
+str(covid_data)
+
+class(covid_data$hits)
+```
+
+```{r}
+covid_data <- covid_data %>%
+  mutate(hits = as.numeric(hits))
+str(covid_data)
+
+covid_data <- covid_data %>%
+  mutate(hits = gsub("<1", "1", hits)) %>%
+  mutate(hits = as.numeric(hits))
+str(covid_data)
+```
+
+
+```{r}
+death_data <- covid_data %>% filter(keyword == "death")
+mean_death <- mean(death_data$hits, na.rm = TRUE)
+var_death <- var(death_data$hits, na.rm = TRUE)
+
+lockdown_data <- covid_data %>% filter(keyword == "lockdown")
+mean_lockdown <- mean(lockdown_data$hits, na.rm = TRUE)
+var_lockdown <- var(lockdown_data$hits, na.rm = TRUE)
+
+hospital_data <- covid_data %>% filter(keyword == "hospital")
+mean_hospital <- mean(hospital_data$hits, na.rm = TRUE)
+var_hospital <- var(hospital_data$hits, na.rm = TRUE)
+
+mean_death
+var_death
+mean_lockdown
+var_lockdown
+mean_hospital
+var_hospital
+```
+
+From the data structure, it shows that the hits column is of the character type, so I couldn't directly perform numerical operations. Therefore, I changed its structure and also addressed the issue with NA values.
+
+### 2A. First, check how many cities don't appear in both data sets, i.e. cannot be matched. Then, create a new data set by joining the Google Trends and the ACS data. Keep only cities that appear in both data sets.
+
+```{r}
+library(censusapi)
+library(readr)
+library(dplyr)
+library(stringr)
+library(gtrendsR)
+
+cs_key <- read_file("census-key.txt")
+
+acs_il <- getCensus(name = "acs/acs5",
+                    vintage = 2020,
+                    vars = c("NAME",            
+                             "B01001_001E", 
+                             "B06002_001E", 
+                             "B19013_001E", 
+                             "B19301_001E"), 
+                    region = "place:*",
+                    regionin = "state:17",
+                    key = cs_key)
+head(acs_il)
+
+acs_il[acs_il == -666666666] <- NA
+
+ acs_il <-
+     acs_il %>%
+     rename(pop = B01001_001E,
+            age = B06002_001E,
+            hh_income = B19013_001E,
+            income = B19301_001E)
+```
+
+```{r}
+acs_il <- acs_il %>%
+  mutate(location = str_replace_all(NAME, c(" village" = "", " city" = ""," CDP" = "", ", Illinois" = "")))
+
+head(acs_il$location)
+```
+
+```{r}
+trend_cities <- res$interest_by_city$location
+acs_cities <- acs_il$location
+
+unmatched_in_trend <- setdiff(trend_cities, acs_cities)
+
+unmatched_in_acs <- setdiff(acs_cities, trend_cities)
+
+num_unmatched_in_trend <- length(unmatched_in_trend) 
+num_unmatched_in_acs <- length(unmatched_in_acs)
+
+num_unmatched_in_trend + num_unmatched_in_acs 
+```
+
+There are 1137 cities that don't appear in both datasets and therefore cannot be merged.
+
+### 2B. Compute the mean of the search popularity for both keywords for cities that have an above average median household income and for those that have an below average median household income. When building your pipe, start with creating the grouping variable and then proceed with the remaining tasks. What conclusions might you draw from this?
+
+```{r}
+library(gtrendsR)
+avg_income <- mean(acs_il$hh_income, na.rm = TRUE)
+acs_il <- acs_il %>%
+  mutate(income_group = ifelse(hh_income > avg_income, "Above Average", "Below Average"))
+merged_data <- inner_join(res$interest_by_city, acs_il, by = "location")
+merged_data <- merged_data %>%
+  filter(!is.na(income_group))
+
+grouped_data <- merged_data %>%
+  group_by(income_group, keyword) %>%
+  summarize(mean_hits = mean(hits, na.rm = TRUE))
+
+grouped_data
+```
+
+In both higher and lower income cities, searches for "loans" were more popular than searches for crime, and the gap between the two was small. This may suggest that demand for and attention to loans is relatively consistent regardless of income. As for the search popularity of crime in higher income or lower income cities, it is more similar and almost the same, so the attention to crime does not show a significant difference between high income and low income groups.
+
+### 2C. Is there a relationship between the median household income and the search popularity of the Google trends terms? Describe the relationship and use a scatterplot with qplot().
+
+```{r}
+library(ggplot2)
+
+ggplot(merged_data, aes(x = hh_income, y = hits, color = keyword)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(title = "Median Household Income X Search Popularity",
+       x = "Median Household Income",
+       y = "Search Hits")
+
+#ggplot(merged_data, aes(x = hh_income, y = hits, color = keyword)) +
+  #geom_point() +
+  #geom_smooth(method = "lm", se = FALSE) + 
+  #labs(title = "Median Household Income X Search Popularity",
+       #x = "Median Household Income",
+       #y = "Search Hits")
+```
+
+Search popularity of keywird "loans" did not change significantly with household income, suggesting that search popularity for "loans" may not be directly related to income. Futhermore, cities with lower incomes are more likely to search for "crime, "while cities with higher incomes are less likely to search for crime.
